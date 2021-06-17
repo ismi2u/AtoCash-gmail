@@ -14,7 +14,7 @@ services:
       mynetwork:
       
   atocash:
-    image: ${DOCKER_REGISTRY-}ismi2u/atocash-atominos
+    image: ${DOCKER_REGISTRY-}ismi2u/atocash
     build:
       context: .
       dockerfile: AtoCash/Dockerfile

@@ -1670,8 +1670,8 @@ namespace AtoCash.Controllers
 
             wb.SaveAs(stream);
 
-
             string uploadsfolder = Path.Combine(hostingEnvironment.ContentRootPath, "Images");
+            //string uploadsfolder = Path.Combine(hostingEnvironment.ContentRootPath, "Reports");
 
             string filepath = Path.Combine(uploadsfolder, xlfileName);
 

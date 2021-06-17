@@ -187,9 +187,9 @@ namespace AtoCash.Authentication
                 var employee = await context.Employees.FindAsync(empid);
                 if (empid == 0)
                 {
-                    empFirstName = "Atominos";
-                    empLastName = "Atominos";
-                    empEmail = "admin@atominosconsulting.com";
+                    empFirstName = "Admin";
+                    empLastName = Constants.EmailDomain;
+                    empEmail = "admin@" + Constants.EmailDomain;
                     currencyCode = "INR";
                     currencyId = 1;
                 }
