@@ -493,6 +493,7 @@ namespace AtoCash.Controllers
         {
             int? empid = searchModel.EmpId;
 
+
             //using predicate builder to add multiple filter cireteria
             var predicate = PredicateBuilder.New<DisbursementsAndClaimsMaster>();
 
@@ -501,135 +502,115 @@ namespace AtoCash.Controllers
                 return Conflict(new RespStatus() { Status = "Failure", Message = "Employee Id not valid" });
             }
 
+            // all employees who report under the manager
+            //if Admin then show all the employee reports irrespective of the department.
+            string empEmailId = _context.Employees.Find(empid).Email;
+            var user = await userManager.FindByEmailAsync(empEmailId);
+            bool isAdmin = await userManager.IsInRoleAsync(user, "Admin");
+
             List<DisbursementsAndClaimsMaster> result = new();
 
-            if (searchModel != null)
+
+            if (searchModel.RequestTypeId != 0 && searchModel.RequestTypeId != null)
+                predicate = predicate.And(x => x.RequestTypeId == searchModel.RequestTypeId);
+            if (searchModel.DepartmentId != 0 && searchModel.DepartmentId != null)
+                predicate = predicate.And(x => x.DepartmentId == searchModel.DepartmentId);
+            if (searchModel.ProjectId != 0 && searchModel.ProjectId != null)
+                predicate = predicate.And(x => x.ProjectId == searchModel.ProjectId);
+            if (searchModel.SubProjectId != 0 && searchModel.SubProjectId != null)
+                predicate = predicate.And(x => x.SubProjectId == searchModel.SubProjectId);
+            if (searchModel.RecordDateFrom.HasValue)
+                predicate = predicate.And(x => x.RecordDate >= searchModel.RecordDateFrom);
+            if (searchModel.RecordDateTo.HasValue)
+                predicate = predicate.And(x => x.RecordDate <= searchModel.RecordDateTo);
+            if (searchModel.AmountFrom > 0)
+                predicate = predicate.And(x => x.ClaimAmount >= searchModel.AmountFrom);
+            if (searchModel.AmountTo > 0)
+                predicate = predicate.And(x => x.ClaimAmount <= searchModel.AmountTo);
+            if (searchModel.IsAccountSettled != null)
+                predicate = predicate.And(x => x.IsSettledAmountCredited == searchModel.IsAccountSettled);
+            if (searchModel.CostCenterId != 0 && searchModel.CostCenterId != null)
+                predicate = predicate.And(x => x.CostCenterId == searchModel.CostCenterId);
+            if (searchModel.ApprovalStatusId != 0 && searchModel.ApprovalStatusId != null)
+                predicate = predicate.And(x => x.ApprovalStatusId == searchModel.ApprovalStatusId);
+
+            if (isAdmin)
             {
+                result = _context.DisbursementsAndClaimsMasters.Where(predicate).OrderBy(e => e.RecordDate).ToList();
 
-                if (searchModel.RequestTypeId != 0 && searchModel.RequestTypeId != null)
-                    predicate = predicate.And(x => x.RequestTypeId == searchModel.RequestTypeId);
-                if (searchModel.DepartmentId != 0 && searchModel.DepartmentId != null)
-                    predicate = predicate.And(x => x.DepartmentId == searchModel.DepartmentId);
-                if (searchModel.ProjectId != 0 && searchModel.ProjectId != null)
-                    predicate = predicate.And(x => x.ProjectId == searchModel.ProjectId);
-                if (searchModel.SubProjectId != 0 && searchModel.SubProjectId != null)
-                    predicate = predicate.And(x => x.SubProjectId == searchModel.SubProjectId);
-                if (searchModel.RecordDateFrom.HasValue)
-                    predicate = predicate.And(x => x.RecordDate >= searchModel.RecordDateFrom);
-                if (searchModel.RecordDateTo.HasValue)
-                    predicate = predicate.And(x => x.RecordDate <= searchModel.RecordDateTo);
-                if (searchModel.AmountFrom > 0)
-                    predicate = predicate.And(x => x.ClaimAmount >= searchModel.AmountFrom);
-                if (searchModel.AmountTo > 0)
-                    predicate = predicate.And(x => x.ClaimAmount <= searchModel.AmountTo);
-                if (searchModel.IsAccountSettled != null)
-                    predicate = predicate.And(x => x.IsSettledAmountCredited == searchModel.IsAccountSettled);
-                if (searchModel.CostCenterId != 0 && searchModel.CostCenterId != null)
-                    predicate = predicate.And(x => x.CostCenterId == searchModel.CostCenterId);
-                if (searchModel.ApprovalStatusId != 0 && searchModel.ApprovalStatusId != null)
-                    predicate = predicate.And(x => x.ApprovalStatusId == searchModel.ApprovalStatusId);
+            }
+            else if (searchModel.IsManager)
+            {
+                result = _context.DisbursementsAndClaimsMasters.Where(predicate).OrderBy(e => e.RecordDate).ToList();
 
-                if (searchModel.IsManager == false)
+                var mgrDeptId = _context.Employees.Find(empid).DepartmentId;
+                List<int> mgrProjects = _context.ProjectManagements.Where(x => x.EmployeeId == empid).Select(p => p.ProjectId).ToList(); //if projManager get projects
+                List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId && e.Id != empid).Select(s => s.Id).ToList();
+
+                result = result.Where(r => mgrReportees.Contains(r.EmployeeId) || mgrProjects.Contains(r.ProjectId ?? 0)).OrderBy(e => e.RecordDate).ToList();
+            }
+            else if (!searchModel.IsManager)
+            {
+                predicate = predicate.And(x => x.EmployeeId == empid);
+
+                result = _context.DisbursementsAndClaimsMasters.Where(predicate).OrderBy(e => e.RecordDate).ToList();
+            }
+
+
+            List<DisbursementsAndClaimsMasterDTO> ListDisbItemsDTO = new();
+
+            await Task.Run(() =>
+            {
+                foreach (DisbursementsAndClaimsMaster disb in result)
                 {
-                    predicate = predicate.And(x => x.EmployeeId == empid);
-                }
+                    DisbursementsAndClaimsMasterDTO disbursementsAndClaimsMasterDTO = new();
+                    disbursementsAndClaimsMasterDTO.Id = disb.Id;
+                    disbursementsAndClaimsMasterDTO.EmployeeId = disb.EmployeeId;
+                    disbursementsAndClaimsMasterDTO.EmployeeName = _context.Employees.Find(disb.EmployeeId).GetFullName();
+                    disbursementsAndClaimsMasterDTO.PettyCashRequestId = disb.PettyCashRequestId;
+                    disbursementsAndClaimsMasterDTO.ExpenseReimburseReqId = disb.ExpenseReimburseReqId;
+                    disbursementsAndClaimsMasterDTO.RequestTypeId = disb.RequestTypeId;
+                    disbursementsAndClaimsMasterDTO.RequestType = _context.RequestTypes.Find(disb.RequestTypeId).RequestName;
+                    disbursementsAndClaimsMasterDTO.DepartmentId = disb.DepartmentId;
+                    disbursementsAndClaimsMasterDTO.DepartmentName = disb.DepartmentId != null ? _context.Departments.Find(disb.DepartmentId).DeptCode : null;
+                    disbursementsAndClaimsMasterDTO.ProjectId = disb.ProjectId;
+                    disbursementsAndClaimsMasterDTO.ProjectName = disb.ProjectId != null ? _context.Projects.Find(disb.ProjectId).ProjectName : null;
+                    disbursementsAndClaimsMasterDTO.SubProjectId = disb.SubProjectId;
+                    disbursementsAndClaimsMasterDTO.SubProjectName = disb.SubProjectId != null ? _context.SubProjects.Find(disb.SubProjectId).SubProjectName : null;
+                    disbursementsAndClaimsMasterDTO.WorkTaskId = disb.WorkTaskId;
+                    disbursementsAndClaimsMasterDTO.WorkTaskName = disb.WorkTaskId != null ? _context.WorkTasks.Find(disb.WorkTaskId).TaskName : null;
+                    disbursementsAndClaimsMasterDTO.CurrencyTypeId = disb.CurrencyTypeId;
+                    disbursementsAndClaimsMasterDTO.CurrencyType = disb.CurrencyTypeId != 0 ? _context.CurrencyTypes.Find(disb.CurrencyTypeId).CurrencyCode : null;
+                    disbursementsAndClaimsMasterDTO.ClaimAmount = disb.ClaimAmount;
+                    disbursementsAndClaimsMasterDTO.AmountToWallet = disb.AmountToWallet ?? 0;
+                    disbursementsAndClaimsMasterDTO.AmountToCredit = disb.AmountToCredit ?? 0;
+                    disbursementsAndClaimsMasterDTO.CostCenterId = disb.CostCenterId;
+                    disbursementsAndClaimsMasterDTO.CostCenter = disb.CostCenterId != 0 ? _context.CostCenters.Find(disb.CostCenterId).CostCenterCode : null;
+                    disbursementsAndClaimsMasterDTO.ApprovalStatusId = disb.ApprovalStatusId;
+                    disbursementsAndClaimsMasterDTO.ApprovalStatusType = disb.ApprovalStatusId != 0 ? _context.ApprovalStatusTypes.Find(disb.ApprovalStatusId).Status : null;
+                    disbursementsAndClaimsMasterDTO.RecordDate = disb.RecordDate.ToShortDateString();
+                    disbursementsAndClaimsMasterDTO.IsSettledAmountCredited = disb.IsSettledAmountCredited ?? false;
+                    disbursementsAndClaimsMasterDTO.SettledDate = disb.SettledDate != null ? disb.SettledDate.Value.ToShortDateString() : string.Empty;
+                    disbursementsAndClaimsMasterDTO.SettlementComment = disb.SettlementComment;
+                    disbursementsAndClaimsMasterDTO.SettlementAccount = disb.SettlementAccount;
+                    disbursementsAndClaimsMasterDTO.SettlementBankCard = disb.SettlementBankCard;
+                    disbursementsAndClaimsMasterDTO.AdditionalData = disb.AdditionalData;
 
-
-                if (predicate.IsStarted)
-                {
-                    result = _context.DisbursementsAndClaimsMasters.Where(predicate).OrderBy(e => e.RecordDate).ToList();
-                }
-                else
-                {
-                    result = _context.DisbursementsAndClaimsMasters.OrderBy(e => e.RecordDate).ToList();
-                }
-
-
-                // all employees who report under the manager
-                if (empid != 0 && searchModel.IsManager == true)
-                {
-                    //if Admin then show all the employee reports irrespective of the department.
-                    string empEmailId = _context.Employees.Find(empid).Email;
-                    var user = await userManager.FindByEmailAsync(empEmailId);
-                    bool isAdmin = await userManager.IsInRoleAsync(user, "Admin");
-
-                    if (isAdmin)
+                    if (searchModel.RequestTypeId == 1)
                     {
-                        if (predicate.IsStarted)
-                        {
-                            result = _context.DisbursementsAndClaimsMasters.Where(predicate).OrderBy(e => e.RecordDate).ToList();
-                        }
-                        else
-                        {
-                            result = _context.DisbursementsAndClaimsMasters.OrderBy(e => e.RecordDate).ToList();
-                        }
+                        disbursementsAndClaimsMasterDTO.RequestTitleDescription = _context.PettyCashRequests.Find(disb.PettyCashRequestId).Comments;
                     }
                     else
                     {
-                        var mgrDeptId = _context.Employees.Find(empid).DepartmentId;
-                        List<int> mgrProjects = _context.ProjectManagements.Where(x => x.EmployeeId == empid).Select(p => p.ProjectId).ToList(); //if projManager get projects
-                        List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId && e.Id != empid).Select(s => s.Id).ToList();
-                        result = result.Where(r => mgrReportees.Contains(r.EmployeeId) || mgrReportees.Contains(r.ProjectId ?? 0)).OrderBy(e => e.RecordDate).ToList();
+                        disbursementsAndClaimsMasterDTO.RequestTitleDescription = _context.ExpenseReimburseRequests.Find(disb.ExpenseReimburseReqId).ExpenseReportTitle;
                     }
+
+                    ListDisbItemsDTO.Add(disbursementsAndClaimsMasterDTO);
                 }
 
+            });
+            return Ok(ListDisbItemsDTO);
 
-                List<DisbursementsAndClaimsMasterDTO> ListDisbItemsDTO = new();
-
-                await Task.Run(() =>
-                {
-                    foreach (DisbursementsAndClaimsMaster disb in result)
-                    {
-                        DisbursementsAndClaimsMasterDTO disbursementsAndClaimsMasterDTO = new();
-                        disbursementsAndClaimsMasterDTO.Id = disb.Id;
-                        disbursementsAndClaimsMasterDTO.EmployeeId = disb.EmployeeId;
-                        disbursementsAndClaimsMasterDTO.EmployeeName = _context.Employees.Find(disb.EmployeeId).GetFullName();
-                        disbursementsAndClaimsMasterDTO.PettyCashRequestId = disb.PettyCashRequestId;
-                        disbursementsAndClaimsMasterDTO.ExpenseReimburseReqId = disb.ExpenseReimburseReqId;
-                        disbursementsAndClaimsMasterDTO.RequestTypeId = disb.RequestTypeId;
-                        disbursementsAndClaimsMasterDTO.RequestType = _context.RequestTypes.Find(disb.RequestTypeId).RequestName;
-                        disbursementsAndClaimsMasterDTO.DepartmentId = disb.DepartmentId;
-                        disbursementsAndClaimsMasterDTO.DepartmentName = disb.DepartmentId != null ? _context.Departments.Find(disb.DepartmentId).DeptCode : null;
-                        disbursementsAndClaimsMasterDTO.ProjectId = disb.ProjectId;
-                        disbursementsAndClaimsMasterDTO.ProjectName = disb.ProjectId != null ? _context.Projects.Find(disb.ProjectId).ProjectName : null;
-                        disbursementsAndClaimsMasterDTO.SubProjectId = disb.SubProjectId;
-                        disbursementsAndClaimsMasterDTO.SubProjectName = disb.SubProjectId != null ? _context.SubProjects.Find(disb.SubProjectId).SubProjectName : null;
-                        disbursementsAndClaimsMasterDTO.WorkTaskId = disb.WorkTaskId;
-                        disbursementsAndClaimsMasterDTO.WorkTaskName = disb.WorkTaskId != null ? _context.WorkTasks.Find(disb.WorkTaskId).TaskName : null;
-                        disbursementsAndClaimsMasterDTO.CurrencyTypeId = disb.CurrencyTypeId;
-                        disbursementsAndClaimsMasterDTO.CurrencyType = disb.CurrencyTypeId != 0 ? _context.CurrencyTypes.Find(disb.CurrencyTypeId).CurrencyCode : null;
-                        disbursementsAndClaimsMasterDTO.ClaimAmount = disb.ClaimAmount;
-                        disbursementsAndClaimsMasterDTO.AmountToWallet = disb.AmountToWallet ?? 0;
-                        disbursementsAndClaimsMasterDTO.AmountToCredit = disb.AmountToCredit ?? 0;
-                        disbursementsAndClaimsMasterDTO.CostCenterId = disb.CostCenterId;
-                        disbursementsAndClaimsMasterDTO.CostCenter = disb.CostCenterId != 0 ? _context.CostCenters.Find(disb.CostCenterId).CostCenterCode : null;
-                        disbursementsAndClaimsMasterDTO.ApprovalStatusId = disb.ApprovalStatusId;
-                        disbursementsAndClaimsMasterDTO.ApprovalStatusType = disb.ApprovalStatusId != 0 ? _context.ApprovalStatusTypes.Find(disb.ApprovalStatusId).Status : null;
-                        disbursementsAndClaimsMasterDTO.RecordDate = disb.RecordDate.ToShortDateString();
-                        disbursementsAndClaimsMasterDTO.IsSettledAmountCredited = disb.IsSettledAmountCredited ?? false;
-                        disbursementsAndClaimsMasterDTO.SettledDate = disb.SettledDate != null ? disb.SettledDate.Value.ToShortDateString() : string.Empty;
-                        disbursementsAndClaimsMasterDTO.SettlementComment = disb.SettlementComment;
-                        disbursementsAndClaimsMasterDTO.SettlementAccount = disb.SettlementAccount;
-                        disbursementsAndClaimsMasterDTO.SettlementBankCard = disb.SettlementBankCard;
-                        disbursementsAndClaimsMasterDTO.AdditionalData = disb.AdditionalData;
-
-                        if (searchModel.RequestTypeId == 1)
-                        {
-                            disbursementsAndClaimsMasterDTO.RequestTitleDescription = _context.PettyCashRequests.Find(disb.PettyCashRequestId).Comments;
-                        }
-                        else
-                        {
-                            disbursementsAndClaimsMasterDTO.RequestTitleDescription = _context.ExpenseReimburseRequests.Find(disb.ExpenseReimburseReqId).ExpenseReportTitle;
-                        }
-
-                        ListDisbItemsDTO.Add(disbursementsAndClaimsMasterDTO);
-                    }
-
-                });
-                return Ok(ListDisbItemsDTO);
-            }
-
-            return Conflict(new RespStatus() { Status = "Failure", Message = "Employee Id not valid" });
         }
 
 
@@ -640,6 +621,8 @@ namespace AtoCash.Controllers
         {
             int? empid = searchModel.EmpId;
 
+
+
             //using predicate builder to add multiple filter cireteria
             var predicate = PredicateBuilder.New<DisbursementsAndClaimsMaster>();
 
@@ -648,136 +631,118 @@ namespace AtoCash.Controllers
                 return Conflict(new RespStatus() { Status = "Failure", Message = "Employee Id not valid" });
             }
 
+            // all employees who report under the manager
+            //if Admin then show all the employee reports irrespective of the department.
+            string empEmailId = _context.Employees.Find(empid).Email;
+            var user = await userManager.FindByEmailAsync(empEmailId);
+            bool isAdmin = await userManager.IsInRoleAsync(user, "Admin");
+
             List<DisbursementsAndClaimsMaster> result = new();
 
-            if (searchModel != null)
+
+            if (searchModel.RequestTypeId != 0 && searchModel.RequestTypeId != null)
+                predicate = predicate.And(x => x.RequestTypeId == searchModel.RequestTypeId);
+            if (searchModel.DepartmentId != 0 && searchModel.DepartmentId != null)
+                predicate = predicate.And(x => x.DepartmentId == searchModel.DepartmentId);
+            if (searchModel.ProjectId != 0 && searchModel.ProjectId != null)
+                predicate = predicate.And(x => x.ProjectId == searchModel.ProjectId);
+            if (searchModel.SubProjectId != 0 && searchModel.SubProjectId != null)
+                predicate = predicate.And(x => x.SubProjectId == searchModel.SubProjectId);
+            if (searchModel.RecordDateFrom.HasValue)
+                predicate = predicate.And(x => x.RecordDate >= searchModel.RecordDateFrom);
+            if (searchModel.RecordDateTo.HasValue)
+                predicate = predicate.And(x => x.RecordDate <= searchModel.RecordDateTo);
+            if (searchModel.AmountFrom > 0)
+                predicate = predicate.And(x => x.ClaimAmount >= searchModel.AmountFrom);
+            if (searchModel.AmountTo > 0)
+                predicate = predicate.And(x => x.ClaimAmount <= searchModel.AmountTo);
+            if (searchModel.IsAccountSettled != null)
+                predicate = predicate.And(x => x.IsSettledAmountCredited == searchModel.IsAccountSettled);
+            if (searchModel.CostCenterId != 0 && searchModel.CostCenterId != null)
+                predicate = predicate.And(x => x.CostCenterId == searchModel.CostCenterId);
+            if (searchModel.ApprovalStatusId != 0 && searchModel.ApprovalStatusId != null)
+                predicate = predicate.And(x => x.ApprovalStatusId == searchModel.ApprovalStatusId);
+
+            if (isAdmin)
             {
+                result = _context.DisbursementsAndClaimsMasters.Where(predicate).OrderBy(e => e.RecordDate).ToList();
 
-                if (searchModel.RequestTypeId != 0 && searchModel.RequestTypeId != null)
-                    predicate = predicate.And(x => x.RequestTypeId == searchModel.RequestTypeId);
-                if (searchModel.DepartmentId != 0 && searchModel.DepartmentId != null)
-                    predicate = predicate.And(x => x.DepartmentId == searchModel.DepartmentId);
-                if (searchModel.ProjectId != 0 && searchModel.ProjectId != null)
-                    predicate = predicate.And(x => x.ProjectId == searchModel.ProjectId);
-                if (searchModel.SubProjectId != 0 && searchModel.SubProjectId != null)
-                    predicate = predicate.And(x => x.SubProjectId == searchModel.SubProjectId);
-                if (searchModel.RecordDateFrom.HasValue)
-                    predicate = predicate.And(x => x.RecordDate >= searchModel.RecordDateFrom);
-                if (searchModel.RecordDateTo.HasValue)
-                    predicate = predicate.And(x => x.RecordDate <= searchModel.RecordDateTo);
-                if (searchModel.AmountFrom > 0)
-                    predicate = predicate.And(x => x.ClaimAmount >= searchModel.AmountFrom);
-                if (searchModel.AmountTo > 0)
-                    predicate = predicate.And(x => x.ClaimAmount <= searchModel.AmountTo);
-                if (searchModel.IsAccountSettled != null)
-                    predicate = predicate.And(x => x.IsSettledAmountCredited == searchModel.IsAccountSettled);
-                if (searchModel.CostCenterId != 0 && searchModel.CostCenterId != null)
-                    predicate = predicate.And(x => x.CostCenterId == searchModel.CostCenterId);
-                if (searchModel.ApprovalStatusId != 0 && searchModel.ApprovalStatusId != null)
-                    predicate = predicate.And(x => x.ApprovalStatusId == searchModel.ApprovalStatusId);
+            }
+            else if (searchModel.IsManager)
+            {
+                result = _context.DisbursementsAndClaimsMasters.Where(predicate).OrderBy(e => e.RecordDate).ToList();
 
-                if (searchModel.IsManager == false)
+                var mgrDeptId = _context.Employees.Find(empid).DepartmentId;
+                List<int> mgrProjects = _context.ProjectManagements.Where(x => x.EmployeeId == empid).Select(p => p.ProjectId).ToList(); //if projManager get projects
+                List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId && e.Id != empid).Select(s => s.Id).ToList();
+
+                result = result.Where(r => mgrReportees.Contains(r.EmployeeId) || mgrProjects.Contains(r.ProjectId ?? 0)).OrderBy(e => e.RecordDate).ToList();
+            }
+            else if (!searchModel.IsManager)
+            {
+                predicate = predicate.And(x => x.EmployeeId == empid);
+
+                result = _context.DisbursementsAndClaimsMasters.Where(predicate).OrderBy(e => e.RecordDate).ToList();
+            }
+
+            List<DisbursementsAndClaimsMasterDTO> ListDisbItemsDTO = new();
+
+            await Task.Run(() =>
+            {
+                foreach (DisbursementsAndClaimsMaster disb in result)
                 {
-                    predicate = predicate.And(x => x.EmployeeId == empid);
-                }
+                    DisbursementsAndClaimsMasterDTO disbursementsAndClaimsMasterDTO = new();
+                    disbursementsAndClaimsMasterDTO.Id = disb.Id;
+                    disbursementsAndClaimsMasterDTO.EmployeeId = disb.EmployeeId;
+                    disbursementsAndClaimsMasterDTO.EmployeeName = _context.Employees.Find(disb.EmployeeId).GetFullName();
+                    disbursementsAndClaimsMasterDTO.PettyCashRequestId = disb.PettyCashRequestId;
+                    disbursementsAndClaimsMasterDTO.ExpenseReimburseReqId = disb.ExpenseReimburseReqId;
+                    disbursementsAndClaimsMasterDTO.RequestTypeId = disb.RequestTypeId;
+                    disbursementsAndClaimsMasterDTO.RequestType = _context.RequestTypes.Find(disb.RequestTypeId).RequestName;
+                    disbursementsAndClaimsMasterDTO.DepartmentId = disb.DepartmentId;
+                    disbursementsAndClaimsMasterDTO.DepartmentName = disb.DepartmentId != null ? _context.Departments.Find(disb.DepartmentId).DeptCode : null;
+                    disbursementsAndClaimsMasterDTO.ProjectId = disb.ProjectId;
+                    disbursementsAndClaimsMasterDTO.ProjectName = disb.ProjectId != null ? _context.Projects.Find(disb.ProjectId).ProjectName : null;
+                    disbursementsAndClaimsMasterDTO.SubProjectId = disb.SubProjectId;
+                    disbursementsAndClaimsMasterDTO.SubProjectName = disb.SubProjectId != null ? _context.SubProjects.Find(disb.SubProjectId).SubProjectName : null;
+                    disbursementsAndClaimsMasterDTO.WorkTaskId = disb.WorkTaskId;
+                    disbursementsAndClaimsMasterDTO.WorkTaskName = disb.WorkTaskId != null ? _context.WorkTasks.Find(disb.WorkTaskId).TaskName : null;
+                    disbursementsAndClaimsMasterDTO.CurrencyTypeId = disb.CurrencyTypeId;
+                    disbursementsAndClaimsMasterDTO.CurrencyType = disb.CurrencyTypeId != 0 ? _context.CurrencyTypes.Find(disb.CurrencyTypeId).CurrencyCode : null;
+                    disbursementsAndClaimsMasterDTO.ClaimAmount = disb.ClaimAmount;
+                    disbursementsAndClaimsMasterDTO.AmountToWallet = disb.AmountToWallet ?? 0;
+                    disbursementsAndClaimsMasterDTO.AmountToCredit = disb.AmountToCredit ?? 0;
+                    disbursementsAndClaimsMasterDTO.CostCenterId = disb.CostCenterId;
+                    disbursementsAndClaimsMasterDTO.CostCenter = disb.CostCenterId != 0 ? _context.CostCenters.Find(disb.CostCenterId).CostCenterCode : null;
+                    disbursementsAndClaimsMasterDTO.ApprovalStatusId = disb.ApprovalStatusId;
+                    disbursementsAndClaimsMasterDTO.ApprovalStatusType = disb.ApprovalStatusId != 0 ? _context.ApprovalStatusTypes.Find(disb.ApprovalStatusId).Status : null;
+                    disbursementsAndClaimsMasterDTO.RecordDate = disb.RecordDate.ToShortDateString();
+                    disbursementsAndClaimsMasterDTO.IsSettledAmountCredited = disb.IsSettledAmountCredited ?? false;
+                    disbursementsAndClaimsMasterDTO.SettledDate = disb.SettledDate != null ? disb.SettledDate.Value.ToShortDateString() : string.Empty;
+                    disbursementsAndClaimsMasterDTO.SettlementComment = disb.SettlementComment;
+                    disbursementsAndClaimsMasterDTO.SettlementAccount = disb.SettlementAccount;
+                    disbursementsAndClaimsMasterDTO.SettlementBankCard = disb.SettlementBankCard;
+                    disbursementsAndClaimsMasterDTO.AdditionalData = disb.AdditionalData;
 
-
-                if (predicate.IsStarted)
-                {
-                    result = _context.DisbursementsAndClaimsMasters.Where(predicate).OrderBy(e => e.RecordDate).ToList();
-                }
-                else
-                {
-                    result = _context.DisbursementsAndClaimsMasters.OrderBy(e => e.RecordDate).ToList();
-                }
-
-
-                // all employees who report under the manager
-                if (empid != 0 && searchModel.IsManager == true)
-                {
-                    //if Admin then show all the employee reports irrespective of the department.
-                    string empEmailId = _context.Employees.Find(empid).Email;
-                    var user = await userManager.FindByEmailAsync(empEmailId);
-                    bool isAdmin = await userManager.IsInRoleAsync(user, "Admin");
-
-                    if (isAdmin)
+                    if (searchModel.RequestTypeId == 1)
                     {
-                        if (predicate.IsStarted)
-                        {
-                            result = _context.DisbursementsAndClaimsMasters.Where(predicate).OrderBy(e => e.RecordDate).ToList();
-                        }
-                        else
-                        {
-                            result = _context.DisbursementsAndClaimsMasters.OrderBy(e => e.RecordDate).ToList();
-                        }
+                        disbursementsAndClaimsMasterDTO.RequestTitleDescription = _context.PettyCashRequests.Find(disb.PettyCashRequestId).Comments;
                     }
                     else
                     {
-                        var mgrDeptId = _context.Employees.Find(empid).DepartmentId;
-                        List<int> mgrProjects = _context.ProjectManagements.Where(x => x.EmployeeId == empid).Select(p => p.ProjectId).ToList(); //if projManager get projects
-                        List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId && e.Id != empid).Select(s => s.Id).ToList();
-                        result = result.Where(r => mgrReportees.Contains(r.EmployeeId) || mgrReportees.Contains(r.ProjectId ?? 0)).OrderBy(e => e.RecordDate).ToList();
+                        disbursementsAndClaimsMasterDTO.RequestTitleDescription = _context.ExpenseReimburseRequests.Find(disb.ExpenseReimburseReqId).ExpenseReportTitle;
                     }
+
+                    ListDisbItemsDTO.Add(disbursementsAndClaimsMasterDTO);
                 }
 
-                List<DisbursementsAndClaimsMasterDTO> ListDisbItemsDTO = new();
+            });
+            //return Ok(ListDisbItemsDTO);
 
-                await Task.Run(() =>
+
+            DataTable dt = new();
+            dt.Columns.AddRange(new DataColumn[22]
                 {
-                    foreach (DisbursementsAndClaimsMaster disb in result)
-                    {
-                        DisbursementsAndClaimsMasterDTO disbursementsAndClaimsMasterDTO = new();
-                        disbursementsAndClaimsMasterDTO.Id = disb.Id;
-                        disbursementsAndClaimsMasterDTO.EmployeeId = disb.EmployeeId;
-                        disbursementsAndClaimsMasterDTO.EmployeeName = _context.Employees.Find(disb.EmployeeId).GetFullName();
-                        disbursementsAndClaimsMasterDTO.PettyCashRequestId = disb.PettyCashRequestId;
-                        disbursementsAndClaimsMasterDTO.ExpenseReimburseReqId = disb.ExpenseReimburseReqId;
-                        disbursementsAndClaimsMasterDTO.RequestTypeId = disb.RequestTypeId;
-                        disbursementsAndClaimsMasterDTO.RequestType = _context.RequestTypes.Find(disb.RequestTypeId).RequestName;
-                        disbursementsAndClaimsMasterDTO.DepartmentId = disb.DepartmentId;
-                        disbursementsAndClaimsMasterDTO.DepartmentName = disb.DepartmentId != null ? _context.Departments.Find(disb.DepartmentId).DeptCode : null;
-                        disbursementsAndClaimsMasterDTO.ProjectId = disb.ProjectId;
-                        disbursementsAndClaimsMasterDTO.ProjectName = disb.ProjectId != null ? _context.Projects.Find(disb.ProjectId).ProjectName : null;
-                        disbursementsAndClaimsMasterDTO.SubProjectId = disb.SubProjectId;
-                        disbursementsAndClaimsMasterDTO.SubProjectName = disb.SubProjectId != null ? _context.SubProjects.Find(disb.SubProjectId).SubProjectName : null;
-                        disbursementsAndClaimsMasterDTO.WorkTaskId = disb.WorkTaskId;
-                        disbursementsAndClaimsMasterDTO.WorkTaskName = disb.WorkTaskId != null ? _context.WorkTasks.Find(disb.WorkTaskId).TaskName : null;
-                        disbursementsAndClaimsMasterDTO.CurrencyTypeId = disb.CurrencyTypeId;
-                        disbursementsAndClaimsMasterDTO.CurrencyType = disb.CurrencyTypeId != 0 ? _context.CurrencyTypes.Find(disb.CurrencyTypeId).CurrencyCode : null;
-                        disbursementsAndClaimsMasterDTO.ClaimAmount = disb.ClaimAmount;
-                        disbursementsAndClaimsMasterDTO.AmountToWallet = disb.AmountToWallet ?? 0;
-                        disbursementsAndClaimsMasterDTO.AmountToCredit = disb.AmountToCredit ?? 0;
-                        disbursementsAndClaimsMasterDTO.CostCenterId = disb.CostCenterId;
-                        disbursementsAndClaimsMasterDTO.CostCenter = disb.CostCenterId != 0 ? _context.CostCenters.Find(disb.CostCenterId).CostCenterCode : null;
-                        disbursementsAndClaimsMasterDTO.ApprovalStatusId = disb.ApprovalStatusId;
-                        disbursementsAndClaimsMasterDTO.ApprovalStatusType = disb.ApprovalStatusId != 0 ? _context.ApprovalStatusTypes.Find(disb.ApprovalStatusId).Status : null;
-                        disbursementsAndClaimsMasterDTO.RecordDate = disb.RecordDate.ToShortDateString();
-                        disbursementsAndClaimsMasterDTO.IsSettledAmountCredited = disb.IsSettledAmountCredited ?? false;
-                        disbursementsAndClaimsMasterDTO.SettledDate = disb.SettledDate != null ? disb.SettledDate.Value.ToShortDateString() : string.Empty;
-                        disbursementsAndClaimsMasterDTO.SettlementComment = disb.SettlementComment;
-                        disbursementsAndClaimsMasterDTO.SettlementAccount = disb.SettlementAccount;
-                        disbursementsAndClaimsMasterDTO.SettlementBankCard = disb.SettlementBankCard;
-                        disbursementsAndClaimsMasterDTO.AdditionalData = disb.AdditionalData;
-
-                        if (searchModel.RequestTypeId == 1)
-                        {
-                            disbursementsAndClaimsMasterDTO.RequestTitleDescription = _context.PettyCashRequests.Find(disb.PettyCashRequestId).Comments;
-                        }
-                        else
-                        {
-                            disbursementsAndClaimsMasterDTO.RequestTitleDescription = _context.ExpenseReimburseRequests.Find(disb.ExpenseReimburseReqId).ExpenseReportTitle;
-                        }
-
-                        ListDisbItemsDTO.Add(disbursementsAndClaimsMasterDTO);
-                    }
-
-                });
-                //return Ok(ListDisbItemsDTO);
-
-
-                DataTable dt = new();
-                dt.Columns.AddRange(new DataColumn[22]
-                    {
                     //new DataColumn("Id", typeof(int)),
                     new DataColumn("EmployeeName", typeof(string)),
                     new DataColumn("PettyCashRequestId", typeof(int)),
@@ -801,49 +766,47 @@ namespace AtoCash.Controllers
                     new DataColumn("SettlementBankCard", typeof(string)),
                     new DataColumn("AdditionalData", typeof(string)),
                     new DataColumn("TitleDescription", typeof(string))
-                    });
+                });
 
 
-                foreach (var disbItem in ListDisbItemsDTO)
-                {
-                    dt.Rows.Add(
-                        disbItem.EmployeeName,
-                        disbItem.PettyCashRequestId,
-                        disbItem.ExpenseReimburseReqId,
-                        disbItem.RequestType,
-                        disbItem.DepartmentName,
-                        disbItem.ProjectName,
-                        disbItem.SubProjectName,
-                        disbItem.WorkTaskName,
-                        disbItem.RecordDate,
-                        disbItem.CurrencyType,
-                        disbItem.ClaimAmount,
-                        disbItem.AmountToWallet,
-                        disbItem.AmountToCredit,
-                        disbItem.CostCenter,
-                        disbItem.ApprovalStatusType,
-                        disbItem.IsSettledAmountCredited,
-                        disbItem.SettledDate,
-                        disbItem.SettlementComment,
-                        disbItem.SettlementAccount,
-                        disbItem.SettlementBankCard,
-                        disbItem.AdditionalData,
-                        disbItem.RequestTitleDescription
-                        );
-                }
-                // Creating the Excel workbook 
-                // Add the datatable to the Excel workbook
-
-                List<string> docUrls = new();
-                var docUrl = GetExcel("CashRequestAndClaimsReport", dt);
-
-                docUrls.Add(docUrl);
-
-                return Ok(docUrls);
+            foreach (var disbItem in ListDisbItemsDTO)
+            {
+                dt.Rows.Add(
+                    disbItem.EmployeeName,
+                    disbItem.PettyCashRequestId,
+                    disbItem.ExpenseReimburseReqId,
+                    disbItem.RequestType,
+                    disbItem.DepartmentName,
+                    disbItem.ProjectName,
+                    disbItem.SubProjectName,
+                    disbItem.WorkTaskName,
+                    disbItem.RecordDate,
+                    disbItem.CurrencyType,
+                    disbItem.ClaimAmount,
+                    disbItem.AmountToWallet,
+                    disbItem.AmountToCredit,
+                    disbItem.CostCenter,
+                    disbItem.ApprovalStatusType,
+                    disbItem.IsSettledAmountCredited,
+                    disbItem.SettledDate,
+                    disbItem.SettlementComment,
+                    disbItem.SettlementAccount,
+                    disbItem.SettlementBankCard,
+                    disbItem.AdditionalData,
+                    disbItem.RequestTitleDescription
+                    );
             }
+            // Creating the Excel workbook 
+            // Add the datatable to the Excel workbook
 
-            return Conflict(new RespStatus() { Status = "Failure", Message = "Employee Id not valid" });
+            List<string> docUrls = new();
+            var docUrl = GetExcel("CashRequestAndClaimsReport", dt);
+
+            docUrls.Add(docUrl);
+
+            return Ok(docUrls);
         }
+
 
 
 
@@ -854,18 +817,24 @@ namespace AtoCash.Controllers
         {
             int? empid = searchModel.EmpId;
 
+
+
             //using predicate builder to add multiple filter cireteria
-            List<TravelApprovalRequest> result = new();
             var predicate = PredicateBuilder.New<TravelApprovalRequest>();
 
-            if (empid == null)
+            if (empid == null || empid == 0)
             {
                 return Conflict(new RespStatus() { Status = "Failure", Message = "Employee Id not valid" });
             }
 
+            // all employees who report under the manager
+            //if Admin then show all the employee reports irrespective of the department.
+            string empEmailId = _context.Employees.Find(empid).Email;
+            var user = await userManager.FindByEmailAsync(empEmailId);
+            bool isAdmin = await userManager.IsInRoleAsync(user, "Admin");
 
-            //var emp = await _context.Employees.FindAsync(empid); //employee object
-            //string empFullName = emp.GetFullName();
+            List<TravelApprovalRequest> result = new();
+
 
             if (searchModel.TravelApprovalRequestId != 0 && searchModel.TravelApprovalRequestId != null)
                 predicate = predicate.And(x => x.Id == searchModel.TravelApprovalRequestId);
@@ -886,47 +855,26 @@ namespace AtoCash.Controllers
             if (searchModel.ApprovalStatusTypeId != 0 && searchModel.ApprovalStatusTypeId != null)
                 predicate = predicate.And(x => x.ApprovalStatusTypeId == searchModel.ApprovalStatusTypeId);
 
-            if (searchModel.IsManager == false)
+            if (isAdmin)
+            {
+                result = predicate.IsStarted ? _context.TravelApprovalRequests.Where(predicate).OrderBy(e => e.ReqRaisedDate).ToList() : _context.TravelApprovalRequests.OrderBy(e => e.ReqRaisedDate).ToList();
+
+            }
+            else if (searchModel.IsManager)
+            {
+                result = predicate.IsStarted ? _context.TravelApprovalRequests.Where(predicate).OrderBy(e => e.ReqRaisedDate).ToList() : _context.TravelApprovalRequests.OrderBy(e => e.ReqRaisedDate).ToList();
+
+                var mgrDeptId = _context.Employees.Find(empid).DepartmentId;
+                List<int> mgrProjects = _context.ProjectManagements.Where(x => x.EmployeeId == empid).Select(p => p.ProjectId).ToList(); //if projManager get projects
+                List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId && e.Id != empid).Select(s => s.Id).ToList();
+
+                result = result.Where(r => mgrReportees.Contains(r.EmployeeId) || mgrProjects.Contains(r.ProjectId ?? 0)).OrderBy(e => e.ReqRaisedDate).ToList();
+            }
+            else if (!searchModel.IsManager)
             {
                 predicate = predicate.And(x => x.EmployeeId == empid);
-            }
 
-
-            if (predicate.IsStarted)
-            {
                 result = _context.TravelApprovalRequests.Where(predicate).OrderBy(e => e.ReqRaisedDate).ToList();
-            }
-            else
-            {
-                result = _context.TravelApprovalRequests.OrderBy(e => e.ReqRaisedDate).ToList();
-            }
-
-            // all employees who report under the manager
-            if (empid != 0 && searchModel.IsManager == true)
-            {
-                //if Admin then show all the employee reports irrespective of the department.
-                string empEmailId = _context.Employees.Find(empid).Email;
-                var user = await userManager.FindByEmailAsync(empEmailId);
-                bool isAdmin = await userManager.IsInRoleAsync(user, "Admin");
-
-                if (isAdmin)
-                {
-                    if (predicate.IsStarted)
-                    {
-                        result = _context.TravelApprovalRequests.Where(predicate).OrderBy(e => e.ReqRaisedDate).ToList();
-                    }
-                    else
-                    {
-                        result = _context.TravelApprovalRequests.OrderBy(e => e.ReqRaisedDate).ToList();
-                    }
-                }
-                else
-                {
-                    var mgrDeptId = _context.Employees.Find(empid).DepartmentId;
-                    List<int> mgrProjects = _context.ProjectManagements.Where(x => x.EmployeeId == empid).Select(p => p.ProjectId).ToList(); //if projManager get projects
-                    List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId && e.Id != empid).Select(s => s.Id).ToList();
-                    result = result.Where(r => mgrReportees.Contains(r.EmployeeId) || mgrReportees.Contains(r.ProjectId ?? 0)).OrderBy(e => e.ReqRaisedDate).ToList();
-                }
             }
 
 
@@ -972,18 +920,24 @@ namespace AtoCash.Controllers
 
             int? empid = searchModel.EmpId;
 
+
+
             //using predicate builder to add multiple filter cireteria
-            List<TravelApprovalRequest> result = new();
             var predicate = PredicateBuilder.New<TravelApprovalRequest>();
 
-            if (empid == null)
+            if (empid == null || empid == 0)
             {
                 return Conflict(new RespStatus() { Status = "Failure", Message = "Employee Id not valid" });
             }
 
-            
-            //var emp = await _context.Employees.FindAsync(empid); //employee object
-            //string empFullName = emp.GetFullName();
+            // all employees who report under the manager
+            //if Admin then show all the employee reports irrespective of the department.
+            string empEmailId = _context.Employees.Find(empid).Email;
+            var user = await userManager.FindByEmailAsync(empEmailId);
+            bool isAdmin = await userManager.IsInRoleAsync(user, "Admin");
+
+            List<TravelApprovalRequest> result = new();
+
 
             if (searchModel.TravelApprovalRequestId != 0 && searchModel.TravelApprovalRequestId != null)
                 predicate = predicate.And(x => x.Id == searchModel.TravelApprovalRequestId);
@@ -1004,52 +958,28 @@ namespace AtoCash.Controllers
             if (searchModel.ApprovalStatusTypeId != 0 && searchModel.ApprovalStatusTypeId != null)
                 predicate = predicate.And(x => x.ApprovalStatusTypeId == searchModel.ApprovalStatusTypeId);
 
+            if (isAdmin)
+            {
+                result = predicate.IsStarted ? _context.TravelApprovalRequests.Where(predicate).OrderBy(e => e.ReqRaisedDate).ToList() : _context.TravelApprovalRequests.OrderBy(e => e.ReqRaisedDate).ToList();
 
-          
+            }
+            else if (searchModel.IsManager)
+            {
+                result = predicate.IsStarted ? _context.TravelApprovalRequests.Where(predicate).OrderBy(e => e.ReqRaisedDate).ToList() : _context.TravelApprovalRequests.OrderBy(e => e.ReqRaisedDate).ToList();
 
-            if (searchModel.IsManager == false)
+                var mgrDeptId = _context.Employees.Find(empid).DepartmentId;
+                List<int> mgrProjects = _context.ProjectManagements.Where(x => x.EmployeeId == empid).Select(p => p.ProjectId).ToList(); //if projManager get projects
+                List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId && e.Id != empid).Select(s => s.Id).ToList();
+
+                result = result.Where(r => mgrReportees.Contains(r.EmployeeId) || mgrProjects.Contains(r.ProjectId ?? 0)).OrderBy(e => e.ReqRaisedDate).ToList();
+            }
+            else if (!searchModel.IsManager)
             {
                 predicate = predicate.And(x => x.EmployeeId == empid);
-            }
 
-
-            if (predicate.IsStarted)
-            {
                 result = _context.TravelApprovalRequests.Where(predicate).OrderBy(e => e.ReqRaisedDate).ToList();
             }
-            else
-            {
-                result = _context.TravelApprovalRequests.OrderBy(e => e.ReqRaisedDate).ToList();
-            }
 
-            // all employees who report under the manager
-            if (empid != 0 && searchModel.IsManager == true)
-            {
-                //if Admin then show all the employee reports irrespective of the department.
-                string empEmailId = _context.Employees.Find(empid).Email;
-                var user = await userManager.FindByEmailAsync(empEmailId);
-                bool isAdmin = await userManager.IsInRoleAsync(user, "Admin");
-
-                if (isAdmin)
-                {
-
-                    if (predicate.IsStarted)
-                    {
-                        result = _context.TravelApprovalRequests.Where(predicate).OrderBy(e => e.ReqRaisedDate).ToList();
-                    }
-                    else
-                    {
-                        result = _context.TravelApprovalRequests.OrderBy(e => e.ReqRaisedDate).ToList();
-                    }
-                }
-                else
-                {
-                    var mgrDeptId = _context.Employees.Find(empid).DepartmentId;
-                    List<int> mgrProjects = _context.ProjectManagements.Where(x => x.EmployeeId == empid).Select(p => p.ProjectId).ToList(); //if projManager get projects
-                    List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId && e.Id != empid).Select(s => s.Id).ToList();
-                    result = result.Where(r => mgrReportees.Contains(r.EmployeeId) || mgrReportees.Contains(r.ProjectId ?? 0)).OrderBy(e => e.ReqRaisedDate).ToList();
-                }
-            }
 
 
             List<TravelApprovalRequestDTO> ListTravelItemsDTO = new();
@@ -1361,67 +1291,59 @@ namespace AtoCash.Controllers
         {
             int? empid = searchModel.EmpId;
 
+
+            //using predicate builder to add multiple filter cireteria
+            var predicate = PredicateBuilder.New<ExpenseSubClaim>();
+
             if (empid == null || empid == 0)
             {
                 return Conflict(new RespStatus() { Status = "Failure", Message = "Employee Id not valid" });
             }
 
+            // all employees who report under the manager
+            //if Admin then show all the employee reports irrespective of the department.
+            string empEmailId = _context.Employees.Find(empid).Email;
+            var user = await userManager.FindByEmailAsync(empEmailId);
+            bool isAdmin = await userManager.IsInRoleAsync(user, "Admin");
+
             List<ExpenseSubClaim> result = new();
             List<ExpenseSubClaimDTO> ListExpenseSubClaimDTO = new();
 
-            //using predicate builder to add multiple filter cireteria
-            var predicate = PredicateBuilder.New<ExpenseSubClaim>();
-
-
-            if (searchModel.ExpenseTypeId != null && searchModel.ExpenseTypeId != 0)
-                predicate = predicate.And(x => x.ExpenseTypeId != searchModel.ExpenseTypeId);
+            if (searchModel.ExpenseTypeId > 0)
+                predicate = predicate.And(x => x.ExpenseTypeId == searchModel.ExpenseTypeId);
             if (searchModel.ExpenseReimbClaimAmountFrom > 0)
                 predicate = predicate.And(x => x.ExpenseReimbClaimAmount >= searchModel.ExpenseReimbClaimAmountFrom);
             if (searchModel.ExpenseReimbClaimAmountTo > 0)
                 predicate = predicate.And(x => x.ExpenseReimbClaimAmount >= searchModel.ExpenseReimbClaimAmountTo);
             if (searchModel.CostCenterId != null && searchModel.CostCenterId != 0)
                 predicate = predicate.And(x => x.CostCenterId != searchModel.CostCenterId);
+            if (searchModel.RequestRaisedDateFrom.HasValue)
+                predicate = predicate.And(x => x.InvoiceDate <= searchModel.RequestRaisedDateFrom);
+            if (searchModel.RequestRaisedDateTo.HasValue)
+                predicate = predicate.And(x => x.InvoiceDate <= searchModel.RequestRaisedDateTo);
+            //if (searchModel.ApprovalStatusTypeId > 0)
+            //    predicate = predicate.And(x => x.ApprovalStatusTypeId == searchModel.ApprovalStatusTypeId);
 
-            // particular employee may be manager or any reportee
-            if (searchModel.IsManager == false)
+            if (isAdmin)
+            {
+                result = predicate.IsStarted ? _context.ExpenseSubClaims.Where(predicate).OrderBy(e => e.Id).ToList() : _context.ExpenseSubClaims.OrderBy(e => e.Id).ToList();
+
+            }
+            else if (searchModel.IsManager)
+            {
+                result = predicate.IsStarted ? _context.ExpenseSubClaims.Where(predicate).OrderBy(e => e.Id).ToList(): _context.ExpenseSubClaims.OrderBy(e => e.Id).ToList();
+
+                var mgrDeptId = _context.Employees.Find(empid).DepartmentId;
+                List<int> mgrProjects = _context.ProjectManagements.Where(x => x.EmployeeId == empid).Select(p => p.ProjectId).ToList(); //if projManager get projects
+                List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId && e.Id != empid).Select(s => s.Id).ToList();
+
+                result = result.Where(r => mgrReportees.Contains(r.EmployeeId) || mgrProjects.Contains(r.ProjectId ?? 0)).OrderBy(e => e.Id).ToList();
+            }
+            else if (!searchModel.IsManager)
+            {
                 predicate = predicate.And(x => x.EmployeeId == empid);
 
-
-            if (predicate.IsStarted)
-            {
-                result = _context.ExpenseSubClaims.Where(predicate).OrderBy(e=> e.Id).ToList();
-            }
-            else
-            {
-                result = _context.ExpenseSubClaims.ToList();
-            }   
-
-            // all employees who report under the manager
-            if (empid != 0 && searchModel.IsManager == true)
-            {
-                //if Admin then show all the employee reports irrespective of the department.
-                string empEmailId = _context.Employees.Find(empid).Email;
-                var user = await userManager.FindByEmailAsync(empEmailId);
-                bool isAdmin = await userManager.IsInRoleAsync(user, "Admin");
-
-                if (isAdmin)
-                {
-                    if (predicate.IsStarted)
-                    {
-                        result = _context.ExpenseSubClaims.Where(predicate).OrderBy(e => e.Id).ToList();
-                    }
-                    else
-                    {
-                        result = _context.ExpenseSubClaims.OrderBy(e => e.Id).ToList();
-                    }
-                }
-               else
-                {
-                    var mgrDeptId = _context.Employees.Find(empid).DepartmentId;
-                    List<int> mgrProjects = _context.ProjectManagements.Where(x => x.EmployeeId == empid).Select(p => p.ProjectId).ToList(); //if projManager get projects
-                    List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId && e.Id != empid).Select(s => s.Id).ToList();
-                    result = result.Where(r => mgrReportees.Contains(r.EmployeeId) || mgrReportees.Contains(r.ProjectId ?? 0)).OrderBy(e => e.Id).ToList();
-                }
+                result = _context.ExpenseSubClaims.Where(predicate).OrderBy(e => e.Id).ToList();
             }
 
 
@@ -1483,68 +1405,63 @@ namespace AtoCash.Controllers
         {
             int? empid = searchModel.EmpId;
 
+
+            //using predicate builder to add multiple filter cireteria
+            var predicate = PredicateBuilder.New<ExpenseSubClaim>();
+
             if (empid == null || empid == 0)
             {
                 return Conflict(new RespStatus() { Status = "Failure", Message = "Employee Id not valid" });
             }
 
+            // all employees who report under the manager
+            //if Admin then show all the employee reports irrespective of the department.
+            string empEmailId = _context.Employees.Find(empid).Email;
+            var user = await userManager.FindByEmailAsync(empEmailId);
+            bool isAdmin = await userManager.IsInRoleAsync(user, "Admin");
+
             List<ExpenseSubClaim> result = new();
             List<ExpenseSubClaimDTO> ListExpenseSubClaimDTO = new();
 
-            //using predicate builder to add multiple filter cireteria
-            var predicate = PredicateBuilder.New<ExpenseSubClaim>();
-
-
-            if (searchModel.ExpenseTypeId != null && searchModel.ExpenseTypeId != 0)
-                predicate = predicate.And(x => x.ExpenseTypeId != searchModel.ExpenseTypeId);
+            if (searchModel.ExpenseTypeId > 0)
+                predicate = predicate.And(x => x.ExpenseTypeId == searchModel.ExpenseTypeId);
             if (searchModel.ExpenseReimbClaimAmountFrom > 0)
                 predicate = predicate.And(x => x.ExpenseReimbClaimAmount >= searchModel.ExpenseReimbClaimAmountFrom);
             if (searchModel.ExpenseReimbClaimAmountTo > 0)
                 predicate = predicate.And(x => x.ExpenseReimbClaimAmount >= searchModel.ExpenseReimbClaimAmountTo);
             if (searchModel.CostCenterId != null && searchModel.CostCenterId != 0)
                 predicate = predicate.And(x => x.CostCenterId != searchModel.CostCenterId);
+            if (searchModel.RequestRaisedDateFrom.HasValue)
+                predicate = predicate.And(x => x.InvoiceDate <= searchModel.RequestRaisedDateFrom);
+            if (searchModel.RequestRaisedDateTo.HasValue)
+                predicate = predicate.And(x => x.InvoiceDate <= searchModel.RequestRaisedDateTo);
+            //if (searchModel.ApprovalStatusTypeId > 0)
+            //    predicate = predicate.And(x => x.ApprovalStatusTypeId == searchModel.ApprovalStatusTypeId);
 
-            // particular employee may be manager or any reportee
-            if (searchModel.IsManager == false)
+            if (isAdmin)
+            {
+                result = predicate.IsStarted ? _context.ExpenseSubClaims.Where(predicate).OrderBy(e => e.Id).ToList() : _context.ExpenseSubClaims.OrderBy(e => e.Id).ToList();
+
+            }
+            else if (searchModel.IsManager)
+            {
+                result = predicate.IsStarted ? _context.ExpenseSubClaims.Where(predicate).OrderBy(e => e.Id).ToList() : _context.ExpenseSubClaims.OrderBy(e => e.Id).ToList();
+
+                var mgrDeptId = _context.Employees.Find(empid).DepartmentId;
+                List<int> mgrProjects = _context.ProjectManagements.Where(x => x.EmployeeId == empid).Select(p => p.ProjectId).ToList(); //if projManager get projects
+                List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId && e.Id != empid).Select(s => s.Id).ToList();
+
+                result = result.Where(r => mgrReportees.Contains(r.EmployeeId) || mgrProjects.Contains(r.ProjectId ?? 0)).OrderBy(e => e.Id).ToList();
+            }
+            else if (!searchModel.IsManager)
+            {
                 predicate = predicate.And(x => x.EmployeeId == empid);
 
-
-            if (predicate.IsStarted)
-            {
                 result = _context.ExpenseSubClaims.Where(predicate).OrderBy(e => e.Id).ToList();
             }
-            else
-            {
-                result = _context.ExpenseSubClaims.OrderBy(e => e.Id).ToList();
-            }
 
-            // all employees who report under the manager
-            if (empid != 0 && searchModel.IsManager == true)
-            {
-                //if Admin then show all the employee reports irrespective of the department.
-                string empEmailId = _context.Employees.Find(empid).Email;
-                var user = await userManager.FindByEmailAsync(empEmailId);
-                bool isAdmin = await userManager.IsInRoleAsync(user, "Admin");
 
-                if (isAdmin)
-                {
-                    if (predicate.IsStarted)
-                    {
-                        result = _context.ExpenseSubClaims.Where(predicate).OrderBy(e => e.Id).ToList();
-                    }
-                    else
-                    {
-                        result = _context.ExpenseSubClaims.OrderBy(e => e.Id).ToList();
-                    }
-                }
-                else
-                {
-                    var mgrDeptId = _context.Employees.Find(empid).DepartmentId;
-                    List<int> mgrProjects = _context.ProjectManagements.Where(x => x.EmployeeId == empid).Select(p => p.ProjectId).ToList(); //if projManager get projects
-                    List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId && e.Id != empid).Select(s => s.Id).ToList();
-                    result = result.Where(r => mgrReportees.Contains(r.EmployeeId) || mgrReportees.Contains(r.ProjectId ?? 0)).OrderBy(e => e.Id).ToList();
-                }
-            }
+
 
             foreach (var expenseSubClaim in result)
             {
@@ -1590,6 +1507,7 @@ namespace AtoCash.Controllers
 
                 ListExpenseSubClaimDTO.Add(expenseSubClaimDTO);
             }
+
 
 
 
@@ -1670,8 +1588,8 @@ namespace AtoCash.Controllers
 
             wb.SaveAs(stream);
 
-            string uploadsfolder = Path.Combine(hostingEnvironment.ContentRootPath, "Images");
-            //string uploadsfolder = Path.Combine(hostingEnvironment.ContentRootPath, "Reports");
+            //string uploadsfolder = Path.Combine(hostingEnvironment.ContentRootPath, "Images");
+            string uploadsfolder = Path.Combine(hostingEnvironment.ContentRootPath, "Reportdocs");
 
             string filepath = Path.Combine(uploadsfolder, xlfileName);
 

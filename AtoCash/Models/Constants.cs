@@ -7,7 +7,7 @@ namespace AtoCash.Models
 {
     public static class Constants
     {
-        public const string EmailDomain = "gmail.com";
+        public const string EmailDomain = "atominosconsulting.com";
 
     }
 }

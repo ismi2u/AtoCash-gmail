@@ -153,7 +153,9 @@ namespace AtoCash.Controllers
             }
 
             //get the employee's approval level for comparison with approver level  to decide "ShowEditDelete" bool
-            int reqEmpApprLevelId = _context.ApprovalRoleMaps.Where(a => a.RoleId == _context.Employees.Find(id).RoleId).FirstOrDefault().ApprovalLevelId;
+            int empRoleId = _context.Employees.Find(id).RoleId;
+            var approvalRoleMap = _context.ApprovalRoleMaps.Where(a => a.RoleId == empRoleId).FirstOrDefault();
+            int reqEmpApprLevelId = approvalRoleMap.ApprovalLevelId;
             int reqEmpApprLevel = _context.ApprovalLevels.Find(reqEmpApprLevelId).Level;
 
             var expenseReimbRequests = await _context.ExpenseReimburseRequests.Where(p => p.EmployeeId == id).ToListAsync();

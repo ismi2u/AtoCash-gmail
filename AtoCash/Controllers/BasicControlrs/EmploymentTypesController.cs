@@ -12,7 +12,7 @@ using AtoCash.Authentication;
 
 namespace AtoCash.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/[controller]/[action]")]
     [ApiController]
     [Authorize(Roles = "AtominosAdmin, Admin, Manager, Finmgr, User")]
     public class EmploymentTypesController : ControllerBase
@@ -37,8 +37,30 @@ namespace AtoCash.Controllers
                 EmploymentTypeDTO employmentTypeDTO = new();
 
                 employmentTypeDTO.Id = emplmttype.Id;
-                employmentTypeDTO.EmpJobTypeCode = emplmttype.EmpJobTypeCode + ":" + emplmttype.EmpJobTypeDesc;
+                employmentTypeDTO.EmpJobTypeCode = emplmttype.EmpJobTypeCode ;
+                employmentTypeDTO.EmpJobTypeDesc = emplmttype.EmpJobTypeDesc;
 
+                ListEmploymentTypeDTO.Add(employmentTypeDTO);
+            }
+
+
+            return Ok(ListEmploymentTypeDTO);
+        }
+
+        [HttpGet]
+        [ActionName("GetEmploymentTypesForDropDown")]
+        public async Task<ActionResult<IEnumerable<EmploymentTypeDTO>>> GetEmploymentTypesForDropDown()
+        {
+            var EmplmntTypes = await _context.EmploymentTypes.ToListAsync();
+
+            List<EmploymentTypeDTO> ListEmploymentTypeDTO = new();
+
+            foreach (EmploymentType emplmttype in EmplmntTypes)
+            {
+                EmploymentTypeDTO employmentTypeDTO = new();
+
+                employmentTypeDTO.Id = emplmttype.Id;
+                employmentTypeDTO.EmpJobTypeCode = emplmttype.EmpJobTypeCode + ":" + emplmttype.EmpJobTypeDesc;
                 ListEmploymentTypeDTO.Add(employmentTypeDTO);
             }
 

@@ -42,6 +42,7 @@ namespace AtoCash
         public void ConfigureServices(IServiceCollection services)
         {
             // "GoogleCloudGmailServer": "Server=35.200.195.72;Port=5432;Database=AtoCashDB;User Id=postgres;Password=Pa55word2019!123;Pooling=true;",
+            // "GoogleCloudAtominosServer": "Server=35.200.253.140;Port=5432;Database=AtoCashDB;User Id=postgres;Password=Pa55word2019!123;Pooling=true;",
             // "PostgreSQLConnectionString": "Server=localhost;Port=5432;Database=AtoCashDB;User Id=postgres;Password=Pa55word2019!123;Pooling=true;",
             //"PostgreSQLInLocalAppInContainer": "Server=host.docker.internal;Port=5432;Database=AtoCashDB;User Id=postgres;Password=Pa55word2019!123;Pooling=true;",
             //"WithinContainerPostGreSQL": "Server=postgresdata;Port=5432;Database=AtoCashDB;User Id=postgres;Password=Pa55word2019!123;Pooling=true;"",
@@ -77,9 +78,13 @@ namespace AtoCash
                 };
             });
 
-            //.SetIsOriginAllowed(origin => new Uri(origin).Host == "localhost")
-            //                .WithOrigins("http://localhost")
-            //                .WithOrigins("https://localhost")
+            //services.AddCors(options =>
+            //  options.AddPolicy("myCorsPolicy", builder => {
+            //      builder.AllowAnyOrigin()
+            //               .AllowAnyHeader()
+            //               .AllowAnyMethod();
+                        //  }
+            //  ));
             services.AddControllers();
             services.AddCors(options =>
                options.AddPolicy("myCorsPolicy", builder => {
@@ -119,22 +124,18 @@ namespace AtoCash
                 app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "AtoCash v1"));
             }
             app.UseStaticFiles();
-            //app.UseStaticFiles(new StaticFileOptions()
-            //{
-            //    FileProvider = new PhysicalFileProvider(Path.Combine(Directory.GetCurrentDirectory(), @"Images")),
-            //    RequestPath = new PathString("/Images")
-            //}); 
+      
 
             app.UseStaticFiles(new StaticFileOptions
             {
                 FileProvider = new PhysicalFileProvider(Path.Combine(env.ContentRootPath, @"Images")),
                 RequestPath = "/app/Images"
             });
-            //app.UseStaticFiles(new StaticFileOptions
-            //{
-            //    FileProvider = new PhysicalFileProvider(Path.Combine(env.ContentRootPath, @"Reports")),
-            //    RequestPath = "/app/Reports"
-            //});
+            app.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = new PhysicalFileProvider(Path.Combine(env.ContentRootPath, @"Reportdocs")),
+                RequestPath = "/app/Reportdocs"
+            });
 
             app.UseHttpsRedirection();
             app.UseCors("myCorsPolicy");

@@ -107,10 +107,10 @@ namespace AtoCash.Controllers
                 empAllCurBalStatusDTO.PendingSettlement = _context.DisbursementsAndClaimsMasters.Where(d => d.EmployeeId == id && d.IsSettledAmountCredited == false && d.ApprovalStatusId == (int)EApprovalStatus.Approved)
                                                         .Select(s => s.AmountToCredit ?? 0).Sum();
 
-                empAllCurBalStatusDTO.PendingApproval= _context.DisbursementsAndClaimsMasters.Where(d => d.EmployeeId == id && d.IsSettledAmountCredited == false  && d.ApprovalStatusId == (int)EApprovalStatus.Pending)
+                empAllCurBalStatusDTO.PendingApproval = _context.DisbursementsAndClaimsMasters.Where(d => d.EmployeeId == id && d.IsSettledAmountCredited == false && d.ApprovalStatusId == (int)EApprovalStatus.Pending)
                                                         .Select(s => s.ClaimAmount).Sum();
 
-                   empAllCurBalStatusDTO.WalletBalLastUpdated = empCurrentPettyCashBalance.UpdatedOn;
+                empAllCurBalStatusDTO.WalletBalLastUpdated = empCurrentPettyCashBalance.UpdatedOn;
 
             });
             return empAllCurBalStatusDTO;
@@ -178,7 +178,7 @@ namespace AtoCash.Controllers
         // GET: api/EmpCurrentPettyCashBalances/GetEmpCashBalanceVsAdvanced
         [HttpGet("{id}")]
         [ActionName("GetEmpCashBalanceVsAdvanced")]
-        public ActionResult<CashbalVsAdvancedVM> GetEmpCashBalanceVsAdvanced(int id)
+        public async Task<ActionResult<CashbalVsAdvancedVM>> GetEmpCashBalanceVsAdvanced(int id)
         {
 
             CashbalVsAdvancedVM cashbalVsAdvancedVM = new();
@@ -189,8 +189,10 @@ namespace AtoCash.Controllers
                 return Ok(cashbalVsAdvancedVM);
             }
 
+            //int test = _context.EmpCurrentPettyCashBalances.Where(e => e.EmployeeId == id).FirstOrDefault().Id;
+            var empCurPettyBal = _context.EmpCurrentPettyCashBalances.Where(e => e.EmployeeId == id).FirstOrDefault();
             //Check if employee cash balance is availabel in the EmpCurrentPettyCashBalance table, if NOT then ADD
-            if (!_context.EmpCurrentPettyCashBalances.Where(e => e.EmployeeId == id).Any())
+            if (empCurPettyBal == null)
             {
                 var emp = _context.Employees.Find(id);
 
@@ -205,28 +207,26 @@ namespace AtoCash.Controllers
                         UpdatedOn = DateTime.Now
                     });
 
-                    _context.SaveChanges();
+                    await _context.SaveChangesAsync();
                 }
-
-                var empCurPettyBal = _context.EmpCurrentPettyCashBalances.Where(e => e.EmployeeId == id).FirstOrDefault();
-                if (empCurPettyBal == null)
-                {
-                    cashbalVsAdvancedVM.CurCashBal = 0;
-                }
-                else { 
-                cashbalVsAdvancedVM.CurCashBal = empCurPettyBal.CurBalance;
-                }
-                if(_context.Employees.Find(id).RoleId != 0)
-                { 
-                cashbalVsAdvancedVM.MaxCashAllowed = _context.JobRoles.Find(_context.Employees.Find(id).RoleId).MaxPettyCashAllowed;
-                }
-                else
-                {
-                    cashbalVsAdvancedVM.MaxCashAllowed = 0;
-                }
-
             }
-
+            empCurPettyBal = _context.EmpCurrentPettyCashBalances.Where(e => e.EmployeeId == id).FirstOrDefault();
+            if (empCurPettyBal == null)
+            {
+                cashbalVsAdvancedVM.CurCashBal = 0;
+            }
+            else
+            {
+                cashbalVsAdvancedVM.CurCashBal = empCurPettyBal.CurBalance;
+            }
+            if (_context.Employees.Find(id).RoleId != 0)
+            {
+                cashbalVsAdvancedVM.MaxCashAllowed = _context.JobRoles.Find(_context.Employees.Find(id).RoleId).MaxPettyCashAllowed;
+            }
+            else
+            {
+                cashbalVsAdvancedVM.MaxCashAllowed = 0;
+            }
             return Ok(cashbalVsAdvancedVM);
         }
 
