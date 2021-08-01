@@ -145,6 +145,11 @@ namespace AtoCash.Controllers.BasicControlrs
             CurrencyType currencyTyp = new();
 
             currencyTyp.CurrencyCode = currencyTypeDto.CurrencyCode;
+
+            if (currencyTypeDto.CurrencyCode.Length > 3)
+            {
+                return Conflict(new RespStatus { Status = "Failure", Message = "Currency Code Exeeds the acceptable Length!" });
+            }
             currencyTyp.CurrencyName = currencyTypeDto.CurrencyName;
             currencyTyp.Country = currencyTypeDto.Country;
             currencyTyp.StatusTypeId = currencyTypeDto.StatusTypeId;
@@ -161,8 +166,8 @@ namespace AtoCash.Controllers.BasicControlrs
         public async Task<IActionResult> DeleteCurrencyType(int id)
         {
             bool blnUsedInEmployees = _context.Employees.Where(e => e.CurrencyTypeId == id).Any();
-            bool blnUsedInCashAdvReq = _context.PettyCashRequests.Where(t => t.EmployeeId == id).Any();
-            bool blnUsedInExpeReimReq = _context.ExpenseReimburseRequests.Where(t => t.EmployeeId == id).Any();
+            bool blnUsedInCashAdvReq = _context.PettyCashRequests.Where(t => t.CurrencyTypeId == id).Any();
+            bool blnUsedInExpeReimReq = _context.ExpenseReimburseRequests.Where(t => t.CurrencyTypeId == id).Any();
 
             if (blnUsedInEmployees || blnUsedInCashAdvReq || blnUsedInExpeReimReq)
             {
@@ -170,7 +175,12 @@ namespace AtoCash.Controllers.BasicControlrs
             }
 
 
-            var currencyType = await _context.CurrencyTypes.FindAsync(id);
+            CurrencyType currencyType = await _context.CurrencyTypes.FindAsync(id);
+
+            if (currencyType.Id == 0)
+            {
+                return Conflict(new RespStatus { Status = "Failure", Message = "Id is invalid" });
+            }
             _context.CurrencyTypes.Remove(currencyType);
             await _context.SaveChangesAsync();
 

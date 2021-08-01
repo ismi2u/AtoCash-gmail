@@ -674,7 +674,7 @@ namespace AtoCash.Controllers
 
                 var mgrDeptId = _context.Employees.Find(empid).DepartmentId;
                 List<int> mgrProjects = _context.ProjectManagements.Where(x => x.EmployeeId == empid).Select(p => p.ProjectId).ToList(); //if projManager get projects
-                List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId && e.Id != empid).Select(s => s.Id).ToList();
+                List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId).Select(s => s.Id).ToList();
 
                 result = result.Where(r => mgrReportees.Contains(r.EmployeeId) || mgrProjects.Contains(r.ProjectId ?? 0)).OrderBy(e => e.RecordDate).ToList();
             }
@@ -866,7 +866,7 @@ namespace AtoCash.Controllers
 
                 var mgrDeptId = _context.Employees.Find(empid).DepartmentId;
                 List<int> mgrProjects = _context.ProjectManagements.Where(x => x.EmployeeId == empid).Select(p => p.ProjectId).ToList(); //if projManager get projects
-                List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId && e.Id != empid).Select(s => s.Id).ToList();
+                List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId).Select(s => s.Id).ToList();
 
                 result = result.Where(r => mgrReportees.Contains(r.EmployeeId) || mgrProjects.Contains(r.ProjectId ?? 0)).OrderBy(e => e.ReqRaisedDate).ToList();
             }
@@ -969,7 +969,7 @@ namespace AtoCash.Controllers
 
                 var mgrDeptId = _context.Employees.Find(empid).DepartmentId;
                 List<int> mgrProjects = _context.ProjectManagements.Where(x => x.EmployeeId == empid).Select(p => p.ProjectId).ToList(); //if projManager get projects
-                List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId && e.Id != empid).Select(s => s.Id).ToList();
+                List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId).Select(s => s.Id).ToList();
 
                 result = result.Where(r => mgrReportees.Contains(r.EmployeeId) || mgrProjects.Contains(r.ProjectId ?? 0)).OrderBy(e => e.ReqRaisedDate).ToList();
             }
@@ -1335,7 +1335,7 @@ namespace AtoCash.Controllers
 
                 var mgrDeptId = _context.Employees.Find(empid).DepartmentId;
                 List<int> mgrProjects = _context.ProjectManagements.Where(x => x.EmployeeId == empid).Select(p => p.ProjectId).ToList(); //if projManager get projects
-                List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId && e.Id != empid).Select(s => s.Id).ToList();
+                List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId).Select(s => s.Id).ToList();
 
                 result = result.Where(r => mgrReportees.Contains(r.EmployeeId) || mgrProjects.Contains(r.ProjectId ?? 0)).OrderBy(e => e.Id).ToList();
             }
@@ -1449,7 +1449,7 @@ namespace AtoCash.Controllers
 
                 var mgrDeptId = _context.Employees.Find(empid).DepartmentId;
                 List<int> mgrProjects = _context.ProjectManagements.Where(x => x.EmployeeId == empid).Select(p => p.ProjectId).ToList(); //if projManager get projects
-                List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId && e.Id != empid).Select(s => s.Id).ToList();
+                List<int> mgrReportees = _context.Employees.Where(e => e.DepartmentId == mgrDeptId).Select(s => s.Id).ToList();
 
                 result = result.Where(r => mgrReportees.Contains(r.EmployeeId) || mgrProjects.Contains(r.ProjectId ?? 0)).OrderBy(e => e.Id).ToList();
             }
@@ -1581,8 +1581,9 @@ namespace AtoCash.Controllers
             // Add the datatable to the Excel workbook
             using XLWorkbook wb = new();
             wb.Worksheets.Add(dt, reporttype);
-            // string xlfileName = reporttype + "_" + DateTime.Now.ToShortDateString().Replace("/", string.Empty) + ".xlsx";
-            string xlfileName = reporttype + ".xlsx";
+
+            string xlfileName = reporttype + "_" + Guid.NewGuid().ToString() + ".xlsx";
+            //string xlfileName = reporttype + ".xlsx";
 
             using MemoryStream stream = new();
 
@@ -1593,8 +1594,14 @@ namespace AtoCash.Controllers
 
             string filepath = Path.Combine(uploadsfolder, xlfileName);
 
-            if (System.IO.File.Exists(filepath))
-                System.IO.File.Delete(filepath);
+            string[] fileswithpath = Directory.GetFiles(uploadsfolder);
+            foreach (string file in fileswithpath)
+            { 
+                System.IO.File.Delete(file);
+            }
+
+            //if (System.IO.File.Exists(filepath))
+            //    System.IO.File.Delete(filepath);
 
             using var outputtream = new FileStream(filepath, FileMode.Create);
 
