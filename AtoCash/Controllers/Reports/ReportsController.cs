@@ -689,7 +689,7 @@ namespace AtoCash.Controllers
 
             await Task.Run(() =>
             {
-                foreach (DisbursementsAndClaimsMaster disb in result)
+                foreach (DisbursementsAndClaimsMaster disb in result.OrderByDescending(x => x.RecordDate).ToList())
                 {
                     DisbursementsAndClaimsMasterDTO disbursementsAndClaimsMasterDTO = new();
                     disbursementsAndClaimsMasterDTO.Id = disb.Id;

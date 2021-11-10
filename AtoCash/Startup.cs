@@ -48,12 +48,13 @@ namespace AtoCash
     //"PostgreSQLInLocalAppInContainer": "Server=host.docker.internal;Port=5432;Database=AtoCashDB;User Id=postgres;Password=Pa55word2019!123;Pooling=true;",
     //"WithinContainerPostGreSQL": "Server=postgresdata;Port=5432;Database=AtoCashDB;User Id=postgres;Password=Pa55word2019!123;Pooling=true;Timeout=300; CommandTimeout=300"
 
-            services.AddDbContextPool<AtoCashDbContext>(options => options.UseNpgsql(Configuration.GetConnectionString("WithinContainerPostGreSQL")));
+            services.AddDbContextPool<AtoCashDbContext>(options => options.UseNpgsql(Configuration.GetConnectionString("GoogleCloudGmailServer")));
 
             services.AddIdentity<ApplicationUser, IdentityRole>()
                 .AddEntityFrameworkStores<AtoCashDbContext>()
                 .AddTokenProvider<DataProtectorTokenProvider<ApplicationUser>>(TokenOptions.DefaultProvider);    // to provide default token for password reset
 
+            services.AddSwaggerDocumentation();
 
             //services.AddIdentityCore<ApplicationUser>(options => options.SignIn.RequireConfirmedAccount = false)
             //.AddEntityFrameworkStores<AtoCashDbContext>()
@@ -160,6 +161,8 @@ namespace AtoCash
 
             app.UseAuthentication(); //add before MVC
             app.UseAuthorization();
+
+            app.UseSwaggerDocumentation();
 
             app.UseEndpoints(endpoints =>
             {
